@@ -1,14 +1,14 @@
 from pydantic import  Field
 from typing import Optional, Dict, Any
-from database_config import DatabaseConfig
+from ..database_config import DatabaseConfig
 
 class PostgresConfig(DatabaseConfig):
     '''
     PostgreSQL DB Config
     '''
     
-    sl_mode: Optional[str] = Field(None, description="SSL mode: disable, allow, prefer, require, verify-ca, verify-full")
-    schema: Optional[str] = Field("public", description="Default schema")
+    ssl_mode: Optional[str] = Field(None, description="SSL mode: disable, allow, prefer, require, verify-ca, verify-full")
+    db_schema: Optional[str] = Field("public", description="Default schema")
     application_name: Optional[str] = Field("python_app", description="Application name for logging")
     
     def get_default_port(self) -> int:

@@ -1,14 +1,15 @@
-from sqlalchemy import create_engine, text, Engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import CursorResult, Row
+from sqlalchemy.engine.base import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from pydantic import BaseModel, Field, field_validator, SecretStr, ConfigDict
 from typing import Optional, List, Dict, Any
 from abc import ABC, abstractmethod
-from database_config import DatabaseConfig
 from urllib.parse import quote_plus
 import logging
 from contextlib import contextmanager
 
+from .database_config import DatabaseConfig
 class DatabaseConnector(ABC):
     """
     Abstract base class for database connectors.

@@ -16,7 +16,7 @@ class DatabaseConfig(ABC, BaseModel):
     host: str = Field(..., description="DB Host identifier", min_length=1)
     database: str = Field(..., description='DB name', min_length=1)
     username: str = Field(..., min_length=1)
-    password: str = SecretStr(Field(..., description="DB Password"))
+    password: SecretStr = SecretStr(Field(..., description="DB Password"))
     #server: str = Field(..., description="DB Server")
     port: Optional[int]= Field(None, description="DB Default Port", gt=0, le=65535)
     #conn_str: str = Field(..., description="DB Connection String")

@@ -1,8 +1,9 @@
-from sqlalchemy import create_engine, text, Engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine.base import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from typing import Optional, List, Dict, Any
-from psql_config import PostgresConfig
-from connector_config import DatabaseConnector
+from .psql_config import PostgresConfig
+from ..connector_config import DatabaseConnector
 
 class PostgresConnector(DatabaseConnector):
     """PostgreSQL-specific connector implementation."""

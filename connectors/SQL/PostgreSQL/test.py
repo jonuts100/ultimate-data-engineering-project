@@ -21,3 +21,31 @@ REQUIREMENTS
 1. Make PostgreSQL db, fill it with sample data
 2. Create fake data sampling script that runs every 1 hour
 """
+
+from .psql_config import PostgresConfig
+from .psql_connector import PostgresConnector
+
+db_cred = {
+    "DB_HOST": "localhost",
+    "DB_NAME": "northwind",
+    "DB_USER": "testadmin",
+    "DB_PASSWORD": "password",
+    "PORT": 5432,
+}
+
+config = PostgresConfig(
+    host=db_cred["DB_HOST"], 
+    database=db_cred['DB_NAME'], 
+    username=db_cred["DB_USER"],
+    password=db_cred["DB_PASSWORD"],
+    port=db_cred['PORT']
+)
+
+cnn_str = config.get_connection_string()
+print(cnn_str)
+
+connector = PostgresConnector(config=config)
+print("="*30)
+print("Connecting to " + cnn_str)
+print(connector.connect())
+print("="*30)

@@ -38,7 +38,7 @@ class PostgresConfig(DatabaseConfig):
             "max_overflow": self.max_overflow,
             "pool_pre_ping": self.pool_pre_ping,
             "connect_args": {
-                "options": f"-c search_path={self.schema}" if self.schema else None
+                "options": f"-c search_path={self.db_schema}" if self.db_schema else {}
             }
         }
         

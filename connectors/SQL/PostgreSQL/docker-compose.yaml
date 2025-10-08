@@ -12,9 +12,26 @@ services:
       - ./northwind_sql:/docker-entrypoint-initdb.d/northwind.northwind_sql
       - ./files:/files
     ports:
+      - 55433:5432
+    networks:
+      - db
+
+
+  fake_db:
+    container_name: fakestream_db
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: fakestream
+      POSTGRES_USER: testadmin
+      POSTGRES_PASSWORD: password
+    volumes:
+      - fake_data:/var/lib/postgresql/data
+      - ./northwind_sql:/docker-entrypoint-initdb.d
+    ports:
       - 55432:5432
     networks:
       - db
+
 
   pgadmin:
     container_name: pgadmin
@@ -46,4 +63,6 @@ volumes:
   postgresql_data:
     driver: local
   postgresql_bin:
+    driver: local
+  fake_data:
     driver: local

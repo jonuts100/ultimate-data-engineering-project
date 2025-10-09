@@ -95,7 +95,6 @@ if __name__ == '__main__':
             email = f.email()
         used_emails.add(email)
         customers.append({
-                "cust_id": id+1,
                 "fullname": f.name(),
                 "email": email,
                 "phone": f.phone_number(),
@@ -104,8 +103,8 @@ if __name__ == '__main__':
             })
     connector.execute_many(
         """
-        INSERT INTO customers (customer_id, full_name, email, phone, address, date_of_birth)
-        VALUES (:cust_id, :fullname, :email, :phone, :adrs, :dob)
+        INSERT INTO customers (full_name, email, phone, address, date_of_birth)
+        VALUES (:fullname, :email, :phone, :adrs, :dob)
         """,
         customers
     )
@@ -137,7 +136,7 @@ if __name__ == '__main__':
         customer = random.choice(customers)
         accounts.append(
             {
-                "account_id" : i+1,
+                
                 "customer_id" : customer["cust_id"], # foreign key
                 "account_number" :  f"ACC-{i+1:04d}",
                 "account_type" : random.choice(account_types),
@@ -149,8 +148,8 @@ if __name__ == '__main__':
         )
     connector.execute_many(
         """
-        INSERT INTO accounts (account_id, customer_id, account_number, account_type, balance, currency, status)
-        VALUES (:account_id, :customer_id, :account_number, :account_type, :balance, :currency, :status)
+        INSERT INTO accounts (customer_id, account_number, account_type, balance, currency, status)
+        VALUES (:customer_id, :account_number, :account_type, :balance, :currency, :status)
         """,
         accounts
     )
@@ -180,7 +179,6 @@ if __name__ == '__main__':
         account1 = random.choice(accounts)
         account2 = random.choice([a for a in accounts if a["account_id"] != account1["account_id"]])
         trx.append({
-            "trx_id": i+1,
             "acc_id": account1["account_id"],
             "trx_type": random.choice(trx_types),
             "amt": round(random.uniform(10, 5000), 2),
@@ -192,8 +190,8 @@ if __name__ == '__main__':
     
     connector.execute_many(
         """
-        INSERT INTO transactions (transaction_id, account_id, transaction_type, amount, currency, description, related_account_id, status)
-        VALUES (:trx_id, :acc_id, :trx_type, :amt, :currency, :description, :related_acc_id, :status)
+        INSERT INTO transactions (account_id, transaction_type, amount, currency, description, related_account_id, status)
+        VALUES (:acc_id, :trx_type, :amt, :currency, :description, :related_acc_id, :status)
         """,
         trx
     )

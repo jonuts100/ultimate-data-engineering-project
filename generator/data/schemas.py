@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Table, Column, Integer, String, Date, DateTime, Text,
-    Numeric, ForeignKey, MetaData, func
+    Numeric, ForeignKey, MetaData, func, Sequence
 )
 
 class SchemaLoader:
@@ -14,7 +14,7 @@ class SchemaLoader:
         customers = Table(
             "customers",
             self.metadata_obj,
-            Column("customer_id", Integer, primary_key=True),
+            Column("customer_id", Integer, primary_key=True, autoincrement=True),
             Column("full_name", Text, nullable=False),
             Column("email", Text, nullable=False, unique=True, index=True),
             Column("phone", Text),
@@ -28,7 +28,7 @@ class SchemaLoader:
         accounts = Table(
             "accounts",
             self.metadata_obj,
-            Column("account_id", Integer, primary_key=True),
+            Column("account_id", Integer, primary_key=True, autoincrement=True),
             Column("customer_id", Integer, ForeignKey("customers.customer_id"), nullable=False),
             Column("account_number", String(20), unique=True, nullable=False, index=True),
             Column("account_type", String(50), nullable=False),  # e.g. savings, checking
@@ -43,7 +43,7 @@ class SchemaLoader:
         transactions = Table(
             "transactions",
             self.metadata_obj,
-            Column("transaction_id", Integer, primary_key=True),
+            Column("transaction_id", Integer, primary_key=True, autoincrement=True),
             Column("account_id", Integer, ForeignKey("accounts.account_id"), nullable=False),
             Column("transaction_type", String(20), nullable=False),  # deposit, withdrawal, transfer
             Column("amount", Numeric(15, 2), nullable=False),

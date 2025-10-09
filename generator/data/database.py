@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import psycopg2
 
 class DatabaseLoader:
@@ -30,3 +30,8 @@ class DatabaseLoader:
             raise ValueError(f"Unsupported platform: {platform}")
 
         return conn_str
+    
+    def connect(self, query, params):
+        with self.engine.connect() as conn:
+            result = conn.execute(text(query), params or {})
+            return result

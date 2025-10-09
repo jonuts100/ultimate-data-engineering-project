@@ -114,5 +114,4 @@ if __name__ == '__main__':
             print(connector.fetch_one(user_query))  # pass string directly
         except Exception as e:
             print(f"Query failed: {e}")
-
     print("="*30)

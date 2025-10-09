@@ -15,9 +15,9 @@ class SchemaLoader:
             "customers",
             self.metadata_obj,
             Column("customer_id", Integer, primary_key=True),
-            Column("full_name", String(100), nullable=False),
-            Column("email", String(100), nullable=False, unique=True, index=True),
-            Column("phone", String(20)),
+            Column("full_name", Text, nullable=False),
+            Column("email", Text, nullable=False, unique=True, index=True),
+            Column("phone", Text),
             Column("address", Text),
             Column("date_of_birth", Date),
             Column("created_at", DateTime, server_default=func.now(), nullable=False),
@@ -49,19 +49,15 @@ class SchemaLoader:
             Column("amount", Numeric(15, 2), nullable=False),
             Column("currency", String(10), nullable=False, default="USD"),
             Column("transaction_date", DateTime, server_default=func.now(), nullable=False),
-            Column("description", Text),
+            Column("description", Text, nullable=True),
             Column("related_account_id", Integer, ForeignKey("accounts.account_id"), nullable=True),
             Column("status", String(20), nullable=False, default="completed"),
             Column("created_at", DateTime, server_default=func.now(), nullable=False),
         )
-        self.create_all()
+        self.metadata_obj.create_all(self.engine)
         # Store for external access
-        self.tables = {
+        return {
             "customers": customers,
             "accounts": accounts,
             "transactions": transactions
         }
-
-    def create_all(self):
-        """Creates all tables in the connected database."""
-        self.metadata_obj.create_all(self.engine)

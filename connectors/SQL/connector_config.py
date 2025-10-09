@@ -82,14 +82,7 @@ class DatabaseConnector(ABC):
             self.connect()
             
         conn = self.engine.connect()
-        try:
-            yield conn
-        except Exception as e:
-            conn.rollback()
-            self.logger.error(f"Transaction failed and rolled back: {e}")
-            raise
-        finally:
-            conn.close()
+        yield conn
         
         
     def close(self):
@@ -158,7 +151,7 @@ class DatabaseConnector(ABC):
         try:
             with self.get_connection() as conn:
                 result = conn.execute(text(query), params or {})
-                return result
+            return result
         except SQLAlchemyError as e:
             self.logger.error(f"Execute query failed: {e}")
             raise

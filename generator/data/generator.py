@@ -1,5 +1,5 @@
 from faker import Faker
-from schemas import SchemaLoader
+from .schemas import SchemaLoader
 from database import DatabaseLoader
 
 fucker = Faker()

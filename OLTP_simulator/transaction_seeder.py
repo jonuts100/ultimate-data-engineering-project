@@ -4,12 +4,13 @@ import pendulum
 from faker import Faker
 import random
 from datetime import datetime, timedelta
-from ..schemas import SchemaLoader
-from ....connectors.SQL.PostgreSQL.psql_config import PostgresConfig
-from ....connectors.SQL.PostgreSQL.psql_connector import PostgresConnector
+from OLTP_simulator.generator.data.schemas import SchemaLoader
+from OLTP_simulator.connectors.SQL.PostgreSQL.psql_config import PostgresConfig
+from OLTP_simulator.connectors.SQL.PostgreSQL.psql_connector import PostgresConnector
 
 
 @dag(
+    dag_id="oltp_simulator_dag",
     schedule="@daily",
     start_date=pendulum.datetime(2025, 10, 9, tz='UTC'),
     catchup=False,
@@ -32,47 +33,40 @@ def realistic_oltp_simulation():
     @task
     def connect_to_db():
         """Establish database connection and ensure schema exists"""
-        fk_db_cred = {
-            "DB_HOST": "localhost",
-            "DB_NAME": "fakestream",
-            "DB_USER": "testadmin",
-            "DB_PASSWORD": "password",
-            "PORT": 55432,
-            "SSL_MODE": "disable"
+        DB_CONFIG = {
+            "host": "localhost",
+            "database": "fakestream",
+            "username": "testadmin",
+            "password": "password",
+            "port": 55432,
+            "ssl_mode": "disable"
         }
         
         try:
-            config = PostgresConfig(
-                host=fk_db_cred["DB_HOST"], 
-                database=fk_db_cred['DB_NAME'], 
-                username=fk_db_cred["DB_USER"],
-                password=fk_db_cred["DB_PASSWORD"],
-                port=fk_db_cred['PORT'],
-                ssl_mode=fk_db_cred["SSL_MODE"]
-            )
-            connector = PostgresConnector(config=config)
+            connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
             connector.connect()
             
             # Ensure schema exists
             SchemaLoader(connector.engine)
             print("✅ Database connection established")
             
-            return connector
+            return DB_CONFIG
             
         except Exception as e:
             print(f"❌ Connection failed: {e}")
             raise
     
     @task
-    def simulate_customer_onboarding(connector: PostgresConnector):
+    def simulate_customer_onboarding(DB_CONFIG: dict):
         """Add new customers (simulates new account signups)"""
+        connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
         f = Faker()
         now = pendulum.now()
         
         # Vary daily volume based on day of week
-        base_customers = 50
+        base_customers = 1000
         if now.day_of_week in [5, 6]:  # Weekend - fewer signups
-            num_customers = random.randint(10, 30)
+            num_customers = random.randint(100, 300)
         else:  # Weekday
             num_customers = random.randint(base_customers - 20, base_customers + 30)
         
@@ -110,10 +104,10 @@ def realistic_oltp_simulation():
         return len(customers_data)
     
     @task
-    def simulate_customer_updates(connector: PostgresConnector):
+    def simulate_customer_updates(DB_CONFIG: dict):
         """Update existing customer information (address changes, phone updates)"""
         f = Faker()
-        
+        connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
         # Get random active customers (5% update their info daily)
         result = connector.execute("""
             SELECT customer_id FROM customers 
@@ -158,13 +152,13 @@ def realistic_oltp_simulation():
         return len(customer_ids)
     
     @task
-    def simulate_account_creation(connector: PostgresConnector):
+    def simulate_account_creation(DB_CONFIG: dict):
         """Create new accounts for existing customers"""
-        
+        connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
         # Get customers who might open new accounts (recent customers + random existing)
         result = connector.execute("""
             SELECT customer_id FROM customers 
-            WHERE created_at > NOW() - INTERVAL '30 days'
+            WHERE created_at > NOW() - INTERVAL '3 days'
             OR customer_id IN (
                 SELECT customer_id FROM customers 
                 ORDER BY RANDOM() 
@@ -218,9 +212,9 @@ def realistic_oltp_simulation():
         return len(accounts_data)
     
     @task
-    def simulate_account_closure(connector: PostgresConnector):
+    def simulate_account_closure(DB_CONFIG: dict):
         """Close some accounts (realistic account lifecycle)"""
-        
+        connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
         # Close 1-2% of active accounts randomly
         result = connector.execute("""
             SELECT account_id FROM accounts 
@@ -249,11 +243,12 @@ def realistic_oltp_simulation():
         return len(accounts_to_close)
     
     @task
-    def simulate_transactions(connector: PostgresConnector):
+    def simulate_transactions(DB_CONFIG: dict):
         """
         Generate realistic transaction patterns with balance updates.
         Simulates: deposits, withdrawals, transfers between accounts.
         """
+        connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
         f = Faker()
         now = pendulum.now()
         
@@ -284,7 +279,8 @@ def realistic_oltp_simulation():
         print(f"\n💰 Processing {num_transactions} transactions...")
         
         # 80/20 rule: 20% of accounts do 80% of transactions
-        active_accounts = random.sample(accounts, k=max(1, len(accounts) // 5))
+        # at least 100 transactions but should never be 100 only 
+        active_accounts = random.sample(accounts, k=max(100, len(accounts) // 5))
         normal_accounts = [a for a in accounts if a not in active_accounts]
         
         transactions_data = []
@@ -307,16 +303,13 @@ def realistic_oltp_simulation():
             else:
                 account = random.choice(normal_accounts) if normal_accounts else random.choice(accounts)
             
-            trx_type = random.choices(
-                list(trx_distribution.keys()),
-                weights=list(trx_distribution.values())
-            )[0]
+            trx_type = random.choices(list(trx_distribution.keys()), weights=list(trx_distribution.values()))
             
             status = random.choice(statuses_weighted)
             
             # Amount varies by transaction type
             if trx_type == "Deposit":
-                amount = round(random.uniform(50, 5000), 2)
+                amount = round(random.uniform(10, 5000) , 2)
             elif trx_type == "Withdrawal":
                 amount = round(random.uniform(20, min(account["balance"] * 0.3, 1000)), 2)
             elif trx_type == "Transfer":
@@ -335,7 +328,7 @@ def realistic_oltp_simulation():
                 "trx_type": trx_type,
                 "amt": amount,
                 "currency": "USD",
-                "description": f.sentence(nb_words=4)[:100],
+                "description": f.sentence(nb_words=4)[:50],
                 "related_acc_id": related_acc,
                 "status": status
             })
@@ -343,17 +336,23 @@ def realistic_oltp_simulation():
             # Update balances only for completed transactions
             if status == "completed":
                 if account["id"] not in balance_updates:
+                    # Update dictionary of balance where key is the user
+                    # this simulates the balance of the user searchable by their id
                     balance_updates[account["id"]] = account["balance"]
                 
                 if trx_type in ["Deposit", "Refund"]:
+                    # add money to balance
                     balance_updates[account["id"]] += amount
                 elif trx_type in ["Withdrawal", "Payment"]:
+                    # User send money so deduct from balance, but balance cannot be 0, so we use max()
                     balance_updates[account["id"]] = max(0, balance_updates[account["id"]] - amount)
-                elif trx_type == "Transfer" and related_acc:
+                elif trx_type == 'Transfer' and related_acc:
+                    # Update 2 balances: the sender and receiver
                     balance_updates[account["id"]] = max(0, balance_updates[account["id"]] - amount)
                     if related_acc not in balance_updates:
+                        # find balance of related account, only dictionary we have is from all accounts, maybe can be optimized?
                         related_balance = next(a["balance"] for a in accounts if a["id"] == related_acc)
-                        balance_updates[related_acc] = related_balance
+                        balance_updates[related_acc] = related_balance 
                     balance_updates[related_acc] += amount
         
         # Insert transactions
@@ -378,14 +377,16 @@ def realistic_oltp_simulation():
         return len(transactions_data)
     
     @task
-    def generate_daily_report(connector: PostgresConnector, 
+    def generate_daily_report(
+                            DB_CONFIG: dict,
                             new_customers: int, 
                             updated_customers: int,
                             new_accounts: int, 
                             closed_accounts: int, 
-                            transactions: int):
+                            transactions: int
+                            ):
         """Generate summary report of daily activity"""
-        
+        connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
         # Get current totals
         result = connector.execute("SELECT COUNT(*) FROM customers")
         total_customers = result.fetchone()[0]
@@ -443,4 +444,4 @@ def realistic_oltp_simulation():
     # Daily summary
     generate_daily_report(db_conn, new_custs, updated_custs, new_accts, closed_accts, trx_count)
 
-realistic_oltp_simulation()
+dag_instance = realistic_oltp_simulation()

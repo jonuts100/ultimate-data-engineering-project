@@ -8,7 +8,7 @@ The ultimate data engineering project that will cover data engineering concepts 
 - [x]  PostgreSQL database
 - [x]  Realistic transaction patterns
 
-![alt_text][https://github.com/jonuts100/ultimate-data-engineering-project/blob/main/Screenshot%20from%202025-10-10%2021-31-34.png?raw=true]
+![alt_text](https://github.com/jonuts100/ultimate-data-engineering-project/blob/main/Screenshot%20from%202025-10-10%2021-31-34.png?raw=true)
 ## Next Phases (2-5)
 ### Week 1: Streaming & Storage
 

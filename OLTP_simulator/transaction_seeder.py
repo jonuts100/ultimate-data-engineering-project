@@ -28,6 +28,20 @@ def realistic_oltp_simulation():
     - Transaction processing with balance updates
     - Customer updates (address, phone changes)
     - Temporal patterns (business hours, weekends)
+    
+    DATA QUALITY ISSUES SIMULATED:
+    1. Duplicate Customers (name variations, typos in email)
+    2. Missing/Null Values (phone, address incomplete)
+    3. Late-Arriving Transactions (arrive days after creation)
+    4. Future-Dated Records (data entry errors)
+    5. Impossible Values (negative ages, balances)
+    6. Circular Transfers (A→B→A same day, fraud indicator)
+    7. Inactive Account Transactions (processing on closed accounts)
+    8. Slowly Changing Dimensions (address changes, status updates)
+    9. Data Type Mismatches (text in numeric fields)
+    10. Referential Integrity Issues (orphaned records)
+    
+    These issues make the transformation layer meaningful and realistic.
     """
     
     @task
@@ -58,14 +72,23 @@ def realistic_oltp_simulation():
     
     @task
     def simulate_customer_onboarding(DB_CONFIG: dict):
-        """Add new customers (simulates new account signups)"""
+        """
+        Generate customers with intentional data quality issues:
+        - Duplicate customers (same person, different spellings)
+        - Missing/null values (30% missing phone, 20% missing address)
+        - Data entry errors (typos in emails)
+        - Invalid data (impossible birth dates)
+        """
+        
+        # CANT pass large stuff like PostgresConnector
+        # So just rebuild connector at each step
         connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
         f = Faker()
         now = pendulum.now()
         
         # Vary daily volume based on day of week
         base_customers = 1000
-        if now.day_of_week in [5, 6]:  # Weekend - fewer signups
+        if now.day_of_week in [5, 6]:  # Weekend -> fewer signups
             num_customers = random.randint(100, 300)
         else:  # Weekday
             num_customers = random.randint(base_customers - 20, base_customers + 30)
@@ -77,16 +100,36 @@ def realistic_oltp_simulation():
         existing_emails = {row[0] for row in result}
         
         customers_data = []
+        duplicate_cust_names = []
         attempts = 0
         while len(customers_data) < num_customers and attempts < num_customers * 5:
+            
+            # QUALITY ISSUE #1 -> DUPLICATE CUSTOMERS
+            # SIMULATE 8% CHANCE OF CREATING A NEAR-DUPLIACTE CUSTOMER
+            # EX. SAME NAME, DIFFERENT EMAIL (INVALID)
+            
             email = f.email()
+            if random.random() < 0.08 and duplicate_cust_names:
+                fullname = random.choice(duplicate_cust_names)
+                email = f.email().replace('@gmail.com', '@binus.ac.id')
+            else:
+                fullname = f.name()
+                duplicate_cust_names.append(fullname)
+            
             if email not in existing_emails:
+                # QUALITY ISSUE #2: Missing/Null Values (30% no phone, 20% no address)
+                phone = f.phone_number() if random.random() <= 0.30 else None
+                addrs = f.address().replace('\n', ',') if random.random() <= 0.2 else None
+                # QUALITY ISSUE #3: Data Entry Errors (5% typo in email)
+                email = email.replace('a', '4').replace('e', '3') if random.random() < 0.05 else email
+                # QUALITY ISSUE #4: Impossible Birth Dates (1% impossible birth rate or data entry error)
+                dob = f.date_of_birth(minimum_age=1, maximum_age=5) if random.random() <= 0.01 else f.date_of_birth(minimum_age=18, maximum_age=80)
                 customers_data.append({
-                    "fullname": f.name(),
+                    "fullname": fullname,
                     "email": email,
-                    "phone": f.phone_number(),
-                    "adrs": f.address().replace('\n', ', '),
-                    "dob": f.date_of_birth(minimum_age=18, maximum_age=75)
+                    "phone": phone,
+                    "adrs": addrs,
+                    "dob": dob
                 })
                 existing_emails.add(email)
             attempts += 1
@@ -100,62 +143,96 @@ def realistic_oltp_simulation():
                 customers_data
             )
             print(f"✅ Onboarded {len(customers_data)} customers")
-        
+            print(f"   📌 Quality Issues: ~{int(len(customers_data)*0.08)} duplicates, "
+                  f"~{int(len(customers_data)*0.30)} missing phone, "
+                  f"~{int(len(customers_data)*0.20)} missing address")
         return len(customers_data)
     
     @task
     def simulate_customer_updates(DB_CONFIG: dict):
-        """Update existing customer information (address changes, phone updates)"""
+        """
+        Simulate customer updates creating Slowly Changing Dimension issues.
+        
+        Example: Customer moves, changes phone, etc.
+        This creates the need for SCD Type 2 handling in transformation layer.
+        """
         f = Faker()
         connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
-        # Get random active customers (5% update their info daily)
+        
+        # Get random active customers (10% update their info daily)
         result = connector.execute("""
             SELECT customer_id FROM customers 
             ORDER BY RANDOM() 
-            LIMIT (SELECT CAST(COUNT(*) * 0.05 AS INTEGER) FROM customers)
+            LIMIT (SELECT CAST(COUNT(*) * 0.10 AS INTEGER) FROM customers)
         """)
-        customer_ids = [row[0] for row in result]
         
-        if not customer_ids:
+        customers_to_update = [row for row in result]
+        
+        if not customers_to_update:
             print("⚠️ No customers to update")
             return 0
         
-        print(f"\n📝 Updating {len(customer_ids)} customer records...")
+        print(f"\n📝 Updating {len(customers_to_update)} customer records...")
         
-        updates = []
-        for cid in customer_ids:
-            update_type = random.choice(['phone', 'address', 'both'])
-            update_data = {"customer_id": cid}
+        
+        for cust in customers_to_update:
             
+            # cust structure: list -> [customer_id, full_name, email, phone, address, date_of_birth, created_at, updated_at]
+            cid = cust[0]
+            updated_cust = cust
+            update_type = random.choice(['phone', 'address', 'both', 'none'])
+            # Changed phone number or inactive number
             if update_type in ['phone', 'both']:
-                update_data['phone'] = f.phone_number()
+                phone = f.phone_number() if random.random() > 0.2 else None
+                # phone is index 3
+                updated_cust[3] = phone
+                
+            # Changed location to somewhere or hiding lol
             if update_type in ['address', 'both']:
-                update_data['address'] = f.address().replace('\n', ', ')
-        
-            if 'phone' in update_data and 'address' in update_data:
-                connector.execute(
-                    "UPDATE customers SET phone = :phone, address = :address WHERE customer_id = :customer_id",
-                    update_data
-                )
-            elif 'phone' in update_data:
-                connector.execute(
-                    "UPDATE customers SET phone = :phone WHERE customer_id = :customer_id",
-                    update_data
-                )
-            elif 'address' in update_data:
-                connector.execute(
-                    "UPDATE customers SET address = :address WHERE customer_id = :customer_id",
-                    update_data
-                )
-        
-        print(f"✅ Updated {len(customer_ids)} customer records")
-        return len(customer_ids)
+                address = f.address().replace('\n', ', ') if random.random() > 0.15 else None
+                updated_cust[4] = address
+            
+            updated_cust_dict = {
+                "fullname": updated_cust[1],
+                "email": updated_cust[2],
+                "phone": updated_cust[3],
+                "adrs": updated_cust[4],
+                "dob": updated_cust[5]
+            }
+            # Update the updated_at column of original customer
+            connector.execute(
+                """
+                UPDATE customers 
+                SET updated_at = NOW() 
+                WHERE customer_id = :customer_id
+                """,
+                {"customer_id": cid}
+            )
+            
+            # Insert new row for the changes made
+            connector.execute(
+                """
+                INSERT INTO customers (full_name, email, phone, address, date_of_birth)
+                VALUES (:fullname, :email, :phone, :adrs, :dob)
+                """,
+                updated_cust_dict
+            )
+            
+        print(f"✅ Updated {len(customers_to_update)} customer records")
+        print(f"   📌 Tracking these as SCD Type 2 changes in transformation layer")
+        return len(customers_to_update)
     
     @task
     def simulate_account_creation(DB_CONFIG: dict):
-        """Create new accounts for existing customers"""
-        connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
+        """
+        Generate accounts with data quality issues:
+        - Impossible balances (negative)
+        - Status inconsistencies
+        - Duplicate account numbers
+        """
+        
         # Get customers who might open new accounts (recent customers + random existing)
+        connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
         result = connector.execute("""
             SELECT customer_id FROM customers 
             WHERE created_at > NOW() - INTERVAL '3 days'
@@ -175,7 +252,7 @@ def realistic_oltp_simulation():
         result = connector.execute("SELECT account_number FROM accounts")
         existing_nums = {row[0] for row in result}
         
-        num_accounts = random.randint(20, 50)
+        num_accounts = random.randint(50, 150)
         print(f"\n🏦 Creating {num_accounts} new accounts...")
         
         account_types = ["Savings", "Checking", "Investment", "Credit"]
@@ -189,12 +266,18 @@ def realistic_oltp_simulation():
             while account_num in existing_nums:
                 counter += 1
                 account_num = f"ACC-{counter:08d}"
+            # QUALITY ISSUE #5: Impossible Balance Values
+            # 2% negative balance (accounting error)
+            if random.random() < 0.02:
+                balance = round(random.uniform(-5000.0, -100.0), 2)
+            else:
+                balance = round(random.uniform(50.0, 100000.0), 2)
             
             accounts_data.append({
                 "customer_id": random.choice(eligible_customers),
                 "account_number": account_num,
                 "account_type": random.choice(account_types),
-                "balance": round(random.uniform(100.0, 10000.0), 2),
+                "balance": balance,
                 "currency": "USD",
                 "status": random.choice(statuses)
             })
@@ -209,6 +292,7 @@ def realistic_oltp_simulation():
             accounts_data
         )
         print(f"✅ Created {len(accounts_data)} accounts")
+        print(f"   📌 Quality Issues: ~{int(len(accounts_data)*0.02)} negative balances")
         return len(accounts_data)
     
     @task
@@ -245,9 +329,15 @@ def realistic_oltp_simulation():
     @task
     def simulate_transactions(DB_CONFIG: dict):
         """
-        Generate realistic transaction patterns with balance updates.
-        Simulates: deposits, withdrawals, transfers between accounts.
+        Generate transactions with realistic data quality issues:
+        - Late-arriving transactions (arrive 5-30 days late)
+        - Future-dated transactions (data entry errors)
+        - Transactions on closed accounts
+        - Circular transfers (fraud pattern)
+        - Inactive account transactions
+        - Status inconsistencies (failed but balance updated)
         """
+        
         connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
         f = Faker()
         now = pendulum.now()
@@ -259,13 +349,15 @@ def realistic_oltp_simulation():
             WHERE status = 'active'
         """)
         accounts = [{"id": row[0], "balance": float(row[1]), "type": row[2]} for row in result]
+        active_accounts = [a for a in accounts if a["status"] == "active"]
+        inactive_accounts = [a for a in accounts if a["status"] in ["inactive", "suspended"]]
         
-        if len(accounts) < 2:
-            print("⚠️ Not enough active accounts for transactions")
+        if len(active_accounts) < 2:
+            print("⚠️ Not enough active accounts")
             return 0
         
         # Volume varies by day and hour
-        base_volume = len(accounts) * 15  # 15 transactions per account avg
+        base_volume = len(active_accounts) * 10  # 10 transactions per account avg
         
         # Weekend: 30% less activity
         if now.day_of_week in [5, 6]:
@@ -278,14 +370,6 @@ def realistic_oltp_simulation():
         num_transactions = random.randint(int(base_volume * 0.8), int(base_volume * 1.2))
         print(f"\n💰 Processing {num_transactions} transactions...")
         
-        # 80/20 rule: 20% of accounts do 80% of transactions
-        # at least 100 transactions but should never be 100 only 
-        active_accounts = random.sample(accounts, k=max(100, len(accounts) // 5))
-        normal_accounts = [a for a in accounts if a not in active_accounts]
-        
-        transactions_data = []
-        balance_updates = {}
-        
         trx_distribution = {
             "Deposit": 0.35,      # 35% deposits
             "Withdrawal": 0.30,   # 30% withdrawals
@@ -295,42 +379,78 @@ def realistic_oltp_simulation():
         }
         
         statuses_weighted = ['completed'] * 90 + ['pending'] * 7 + ['failed'] * 3
+        transactions_data = []
+        balance_updates = {}
+        recent_transfers = {}
         
-        for _ in range(num_transactions):
-            # Use active accounts 80% of the time
-            if random.random() < 0.8 and active_accounts:
-                account = random.choice(active_accounts)
+        quality_issue_counts = {
+            'late_arriving': 0,
+            'future_dated': 0,
+            'inactive_account': 0,
+            'circular_transfer': 0,
+            'impossible_amount': 0
+        }
+        
+        for i in range(num_transactions):
+            # QUALITY ISSUE #6: Transactions on Inactive/Closed Accounts
+            # 3% of transactions happen on inactive accounts (shouldn't happen in real system)
+            if random.random() < 0.03 and inactive_accounts:
+                account = random.choice(inactive_accounts)
+                quality_issue_counts['inactive_account'] += 1
             else:
-                account = random.choice(normal_accounts) if normal_accounts else random.choice(accounts)
+                account = random.choice(active_accounts)
             
-            trx_type = random.choices(list(trx_distribution.keys()), weights=list(trx_distribution.values()))
+            trx_type = random.choices(list(trx_distribution.keys()), weights=list(trx_distribution.values()))[0]
             
             status = random.choice(statuses_weighted)
             
-            # Amount varies by transaction type
-            if trx_type == "Deposit":
-                amount = round(random.uniform(10, 5000) , 2)
-            elif trx_type == "Withdrawal":
-                amount = round(random.uniform(20, min(account["balance"] * 0.3, 1000)), 2)
-            elif trx_type == "Transfer":
-                amount = round(random.uniform(10, min(account["balance"] * 0.5, 2000)), 2)
-            elif trx_type == "Payment":
-                amount = round(random.uniform(5, 500), 2)
-            else:  # Refund
-                amount = round(random.uniform(10, 200), 2)
+            # QUALITY ISSUE #5: Impossible Transaction Amounts
+            if random.random() < 0.01:  # 1% impossible amounts
+                if trx_type == "Withdrawal":
+                    amount = round(random.uniform(10000, 99999), 2)  # Overdraft
+                else:
+                    amount = round(random.uniform(100000, 999999), 2)  # Unrealistic
+                quality_issue_counts['impossible_amount'] += 1
+            else:
+                if trx_type == "Deposit":
+                    amount = round(random.uniform(50, 5000), 2)
+                elif trx_type == "Withdrawal":
+                    amount = round(random.uniform(20, min(account["balance"] * 0.5, 1000)), 2)
+                elif trx_type == "Transfer":
+                    amount = round(random.uniform(10, min(account["balance"] * 0.5, 2000)), 2)
+                elif trx_type == "Payment":
+                    amount = round(random.uniform(5, 500), 2)
+                else:
+                    amount = round(random.uniform(10, 200), 2)
             
             related_acc = None
+            # QUALITY ISSUE #7: Circular Transfers (A→B→A, fraud indicator)
             if trx_type == "Transfer":
                 related_acc = random.choice([a["id"] for a in accounts if a["id"] != account["id"]])
+
+                if random.random() < 0.02:
+                    if account['id'] in recent_transfers:
+                        related_acc = recent_transfers[account["id"]]
+                        quality_issue_counts['circular_transfer'] += 1
+                recent_transfers[account["id"]] = related_acc
+            
+            # QUALITY ISSUE #3: Late-Arriving Transactions
+            # 5% of transactions arrive 5-30 days late
+            transaction_date = now
+            if random.random() < 0.05:
+                days_late = random.randint(5, 30)
+                transaction_date = now - timedelta(days=days_late)
+                quality_issue_counts['late_arriving'] += 1
+           
             
             transactions_data.append({
                 "acc_id": account["id"],
                 "trx_type": trx_type,
                 "amt": amount,
                 "currency": "USD",
-                "description": f.sentence(nb_words=4)[:50],
+                "description": f.sentence(nb_words=4)[:100],
                 "related_acc_id": related_acc,
-                "status": status
+                "status": status,
             })
             
             # Update balances only for completed transactions
@@ -373,8 +493,16 @@ def realistic_oltp_simulation():
             )
         
         print(f"✅ Processed {len(transactions_data)} transactions")
-        print(f"✅ Updated {len(balance_updates)} account balances")
+        print(f"   📌 Quality Issues Found:")
+        print(f"      • Late-arriving (5-30 days): {quality_issue_counts['late_arriving']}")
+        print(f"      • Future-dated: {quality_issue_counts['future_dated']}")
+        print(f"      • Inactive account transactions: {quality_issue_counts['inactive_account']}")
+        print(f"      • Circular transfers (fraud pattern): {quality_issue_counts['circular_transfer']}")
+        print(f"      • Impossible amounts: {quality_issue_counts['impossible_amount']}")
+        print(f"   ✅ These will be caught in transformation layer!")
+        
         return len(transactions_data)
+    
     
     @task
     def generate_daily_report(

@@ -106,12 +106,19 @@ if __name__ == '__main__':
         print(f"{table}\n" + "\n".join(f" - {col}" for col in cols))
 
     print("="*30)
-    print("TESTING CONNECTIVITY")
-    user_query = input("SQL Query: ")
+    # print("TESTING CONNECTIVITY")
+    # user_query = input("SQL Query: ")
     
-    if is_select_query(user_query):
-        try:
-            print(connector.fetch_one(user_query))  # pass string directly
-        except Exception as e:
-            print(f"Query failed: {e}")
-    print("="*30)
+    # if is_select_query(user_query):
+    #     try:
+    #         print(connector.fetch_one(user_query))  # pass string directly
+    #     except Exception as e:
+    #         print(f"Query failed: {e}")
+    # print("="*30)
+    
+    print("TESTING EXTRACT AND LOAD TO S3")
+    try:
+        connector.extract()
+    except Exception as e:
+        print("Error while extracting data: " + str(e))
+    

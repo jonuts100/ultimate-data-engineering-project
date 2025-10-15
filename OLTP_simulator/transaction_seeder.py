@@ -1,9 +1,17 @@
+# Dynamically add project root to Python path
+import os
+import sys
+
+PROJECT_ROOT = "/home/jonut/Projects/ultimate-data-engineering-project"
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+    
 import airflow
 from airflow.sdk import dag, task
 import pendulum
 from faker import Faker
 import random
-from datetime import datetime, timedelta
+from datetime import timedelta
 from OLTP_simulator.generator.data.schemas import SchemaLoader
 from OLTP_simulator.connectors.SQL.PostgreSQL.psql_config import PostgresConfig
 from OLTP_simulator.connectors.SQL.PostgreSQL.psql_connector import PostgresConnector
@@ -148,79 +156,80 @@ def realistic_oltp_simulation():
                   f"~{int(len(customers_data)*0.20)} missing address")
         return len(customers_data)
     
-    @task
-    def simulate_customer_updates(DB_CONFIG: dict):
-        """
-        Simulate customer updates creating Slowly Changing Dimension issues.
+    # @task
+    # def simulate_customer_updates(DB_CONFIG: dict):
+    #     """
+    #     Simulate customer updates creating Slowly Changing Dimension issues.
         
-        Example: Customer moves, changes phone, etc.
-        This creates the need for SCD Type 2 handling in transformation layer.
-        """
-        f = Faker()
-        connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
+    #     Example: Customer moves, changes phone, etc.
+    #     This creates the need for SCD Type 2 handling in transformation layer.
+    #     """
+    #     f = Faker()
+    #     connector = PostgresConnector(config=PostgresConfig(**DB_CONFIG))
         
-        # Get random active customers (10% update their info daily)
-        result = connector.execute("""
-            SELECT customer_id FROM customers 
-            ORDER BY RANDOM() 
-            LIMIT (SELECT CAST(COUNT(*) * 0.10 AS INTEGER) FROM customers)
-        """)
+    #     # Get random active customers (10% update their info daily)
+    #     result = connector.execute("""
+    #         SELECT * FROM customers 
+    #         ORDER BY RANDOM() 
+    #         LIMIT (SELECT CAST(COUNT(*) * 0.10 AS INTEGER) FROM customers)
+    #     """)
         
-        customers_to_update = [row for row in result]
+    #     customers_to_update = [row for row in result]
         
-        if not customers_to_update:
-            print("⚠️ No customers to update")
-            return 0
+    #     if not customers_to_update:
+    #         print("⚠️ No customers to update")
+    #         return 0
         
-        print(f"\n📝 Updating {len(customers_to_update)} customer records...")
+    #     print(f"\n📝 Updating {len(customers_to_update)} customer records...")
         
         
-        for cust in customers_to_update:
+    #     for cust in customers_to_update:
             
-            # cust structure: list -> [customer_id, full_name, email, phone, address, date_of_birth, created_at, updated_at]
-            cid = cust[0]
-            updated_cust = cust
-            update_type = random.choice(['phone', 'address', 'both', 'none'])
-            # Changed phone number or inactive number
-            if update_type in ['phone', 'both']:
-                phone = f.phone_number() if random.random() > 0.2 else None
-                # phone is index 3
-                updated_cust[3] = phone
+    #         # cust structure: list -> [customer_id, full_name, email, phone, address, date_of_birth, created_at, updated_at]
+    #         cid = cust[0]
+    #         updated_cust = list(cust)
+    #         print(updated_cust, type(updated_cust))
+    #         update_type = random.choice(['phone', 'address', 'both', 'none'])
+    #         # Changed phone number or inactive number
+    #         if update_type in ['phone', 'both']:
+    #             phone = f.phone_number() if random.random() > 0.2 else None
+    #             # phone is index 3
+    #             updated_cust[3] = phone
                 
-            # Changed location to somewhere or hiding lol
-            if update_type in ['address', 'both']:
-                address = f.address().replace('\n', ', ') if random.random() > 0.15 else None
-                updated_cust[4] = address
+    #         # Changed location to somewhere or hiding lol
+    #         if update_type in ['address', 'both']:
+    #             address = f.address().replace('\n', ', ') if random.random() > 0.15 else None
+    #             updated_cust[4] = address
+
+    #         updated_cust_dict = {
+    #             "fullname": updated_cust[1],
+    #             "email": updated_cust[2],
+    #             "phone": updated_cust[3],
+    #             "adrs": updated_cust[4],
+    #             "dob": updated_cust[5]
+    #         }
+    #         # Update the updated_at column of original customer
+    #         connector.execute(
+    #             """
+    #             UPDATE customers 
+    #             SET updated_at = NOW() 
+    #             WHERE customer_id = :customer_id
+    #             """,
+    #             {"customer_id": cid}
+    #         )
             
-            updated_cust_dict = {
-                "fullname": updated_cust[1],
-                "email": updated_cust[2],
-                "phone": updated_cust[3],
-                "adrs": updated_cust[4],
-                "dob": updated_cust[5]
-            }
-            # Update the updated_at column of original customer
-            connector.execute(
-                """
-                UPDATE customers 
-                SET updated_at = NOW() 
-                WHERE customer_id = :customer_id
-                """,
-                {"customer_id": cid}
-            )
+    #         # Insert new row for the changes made
+    #         connector.execute(
+    #             """
+    #             INSERT INTO customers (full_name, email, phone, address, date_of_birth)
+    #             VALUES (:fullname, :email, :phone, :adrs, :dob)
+    #             """,
+    #             updated_cust_dict
+    #         )
             
-            # Insert new row for the changes made
-            connector.execute(
-                """
-                INSERT INTO customers (full_name, email, phone, address, date_of_birth)
-                VALUES (:fullname, :email, :phone, :adrs, :dob)
-                """,
-                updated_cust_dict
-            )
-            
-        print(f"✅ Updated {len(customers_to_update)} customer records")
-        print(f"   📌 Tracking these as SCD Type 2 changes in transformation layer")
-        return len(customers_to_update)
+    #     print(f"✅ Updated {len(customers_to_update)} customer records")
+    #     print(f"   📌 Tracking these as SCD Type 2 changes in transformation layer")
+    #     return len(customers_to_update)
     
     @task
     def simulate_account_creation(DB_CONFIG: dict):
@@ -344,11 +353,11 @@ def realistic_oltp_simulation():
         
         # Get active accounts
         result = connector.execute("""
-            SELECT account_id, balance, account_type 
+            SELECT account_id, balance, account_type, status
             FROM accounts 
             WHERE status = 'active'
         """)
-        accounts = [{"id": row[0], "balance": float(row[1]), "type": row[2]} for row in result]
+        accounts = [{"id": row[0], "balance": float(row[1]), "type": row[2], "status": row[3]} for row in result]
         active_accounts = [a for a in accounts if a["status"] == "active"]
         inactive_accounts = [a for a in accounts if a["status"] in ["inactive", "suspended"]]
         
@@ -391,7 +400,7 @@ def realistic_oltp_simulation():
             'impossible_amount': 0
         }
         
-        for i in range(num_transactions):
+        for _ in range(num_transactions):
             # QUALITY ISSUE #6: Transactions on Inactive/Closed Accounts
             # 3% of transactions happen on inactive accounts (shouldn't happen in real system)
             if random.random() < 0.03 and inactive_accounts:
@@ -508,7 +517,7 @@ def realistic_oltp_simulation():
     def generate_daily_report(
                             DB_CONFIG: dict,
                             new_customers: int, 
-                            updated_customers: int,
+                            # updated_customers: int,
                             new_accounts: int, 
                             closed_accounts: int, 
                             transactions: int
@@ -540,7 +549,7 @@ def realistic_oltp_simulation():
         print(f"  • New Accounts: {new_accounts}")
         print(f"  • Transactions: {transactions}")
         print("\n✏️  UPDATES:")
-        print(f"  • Customer Updates: {updated_customers}")
+        # print(f"  • Customer Updates: {updated_customers}")
         print(f"  • Accounts Closed: {closed_accounts}")
         print("\n📈 CURRENT TOTALS:")
         print(f"  • Total Customers: {total_customers}")
@@ -560,9 +569,9 @@ def realistic_oltp_simulation():
     
     # Customer lifecycle
     new_custs = simulate_customer_onboarding(db_conn)
-    updated_custs = simulate_customer_updates(db_conn)
+    # updated_custs = simulate_customer_updates(db_conn)
     
-    # Account lifecycle
+    # # Account lifecycle
     new_accts = simulate_account_creation(db_conn)
     closed_accts = simulate_account_closure(db_conn)
     
@@ -570,6 +579,6 @@ def realistic_oltp_simulation():
     trx_count = simulate_transactions(db_conn)
     
     # Daily summary
-    generate_daily_report(db_conn, new_custs, updated_custs, new_accts, closed_accts, trx_count)
+    generate_daily_report(db_conn, new_custs, new_accts, closed_accts, trx_count)
 
 dag_instance = realistic_oltp_simulation()

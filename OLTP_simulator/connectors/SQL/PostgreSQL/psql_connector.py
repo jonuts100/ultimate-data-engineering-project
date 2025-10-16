@@ -130,8 +130,9 @@ class PostgresConnector(DatabaseConnector):
             
             self.logger.info(f"Saved {table}")
             self.load(df, table)
+        return table_datas
 
-    def load(self, df: pd.DataFrame, table):
+    def load(self, df: pd.DataFrame, table=None, last_ts=None):
         try:
             # get s3 config
             content = open("connectors/env/config.json")

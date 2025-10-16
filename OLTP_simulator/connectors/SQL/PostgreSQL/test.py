@@ -116,9 +116,9 @@ if __name__ == '__main__':
     #         print(f"Query failed: {e}")
     # print("="*30)
     
-    print("TESTING EXTRACT AND LOAD TO S3")
-    try:
-        connector.extract()
-    except Exception as e:
-        print("Error while extracting data: " + str(e))
+    # print("TESTING EXTRACT AND LOAD TO S3")
+    # try:
+    #     connector.extract()
+    # except Exception as e:
+    #     print("Error while extracting data: " + str(e))
     

@@ -1,13 +1,15 @@
 from sqlalchemy import (
     Table, Column, Integer, String, Date, DateTime, Text,
-    Numeric, ForeignKey, MetaData, func, Sequence
+    Numeric, ForeignKey, MetaData, func, Sequence, create_engine
 )
+from sqlalchemy.schema import CreateTable
 
 class SchemaLoader:
     def __init__(self, engine=None):
         self.engine = engine
         self.metadata_obj = MetaData()
         self.tables = self._load_schemas()
+        self.ddl_statements = self._generate_ddls()  # ✅ added
 
     def _load_schemas(self):
         # --- CUSTOMERS TABLE ---
@@ -31,12 +33,14 @@ class SchemaLoader:
             Column("account_id", Integer, primary_key=True, autoincrement=True),
             Column("customer_id", Integer, ForeignKey("customers.customer_id"), nullable=False),
             Column("account_number", String(20), unique=True, nullable=False, index=True),
-            Column("account_type", String(50), nullable=False),  # e.g. savings, checking
+            Column("account_type", String(50), nullable=False),
             Column("balance", Numeric(15, 2), nullable=False, default=0.00),
             Column("currency", String(10), nullable=False, default="USD"),
             Column("status", String(20), nullable=False, default="active"),
             Column("opened_at", DateTime, server_default=func.now(), nullable=False),
             Column("closed_at", DateTime, nullable=True),
+            Column("created_at", DateTime, server_default=func.now(), nullable=False),
+            Column("updated_at", DateTime, server_default=func.now(), onupdate=func.now(), nullable=False),
         )
 
         # --- TRANSACTIONS TABLE ---
@@ -45,7 +49,7 @@ class SchemaLoader:
             self.metadata_obj,
             Column("transaction_id", Integer, primary_key=True, autoincrement=True),
             Column("account_id", Integer, ForeignKey("accounts.account_id"), nullable=False),
-            Column("transaction_type", String(20), nullable=False),  # deposit, withdrawal, transfer
+            Column("transaction_type", String(20), nullable=False),
             Column("amount", Numeric(15, 2), nullable=False),
             Column("currency", String(10), nullable=False, default="USD"),
             Column("transaction_date", DateTime, server_default=func.now(), nullable=False),
@@ -53,11 +57,36 @@ class SchemaLoader:
             Column("related_account_id", Integer, ForeignKey("accounts.account_id"), nullable=True),
             Column("status", String(20), nullable=False, default="completed"),
             Column("created_at", DateTime, server_default=func.now(), nullable=False),
+            Column("updated_at", DateTime, server_default=func.now(), onupdate=func.now(), nullable=False),
         )
-        self.metadata_obj.create_all(self.engine)
-        # Store for external access
+
+        # Create tables physically in DB
+        if self.engine:
+            self.metadata_obj.create_all(self.engine)
+
         return {
             "customers": customers,
             "accounts": accounts,
             "transactions": transactions
         }
+
+    def _generate_ddls(self):
+        """Generate raw CREATE TABLE DDL strings for all defined tables."""
+        ddl_map = {}
+        for name, table in self.tables.items():
+            ddl = str(CreateTable(table).compile(self.engine))
+            ddl_map[name] = ddl
+        return ddl_map
+
+
+# Example usage:
+if __name__ == "__main__":
+    engine = create_engine("postgresql+psycopg2://testadmin:password@localhost:55432/fakestream")
+    schema_loader = SchemaLoader(engine=engine)
+
+    print("✅ Tables created successfully!")
+    print("\n📜 Generated DDL statements:\n")
+    for name, ddl in schema_loader.ddl_statements.items():
+        print(f"-- {name} --")
+        print(ddl)
+        print()

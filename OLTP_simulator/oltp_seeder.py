@@ -19,7 +19,7 @@ from OLTP_simulator.connectors.SQL.PostgreSQL.psql_connector import PostgresConn
 
 @dag(
     dag_id="oltp_simulator_dag",
-    schedule="@daily",
+    schedule="@hourly",
     start_date=pendulum.datetime(2025, 10, 9, tz='UTC'),
     catchup=False,
     tags=["oltp", "simulation"],
@@ -95,9 +95,9 @@ def realistic_oltp_simulation():
         now = pendulum.now()
         
         # Vary daily volume based on day of week
-        base_customers = 1000
+        base_customers = 10000
         if now.day_of_week in [5, 6]:  # Weekend -> fewer signups
-            num_customers = random.randint(100, 300)
+            num_customers = random.randint(2000, 5000)
         else:  # Weekday
             num_customers = random.randint(base_customers - 20, base_customers + 30)
         
@@ -126,8 +126,8 @@ def realistic_oltp_simulation():
             
             if email not in existing_emails:
                 # QUALITY ISSUE #2: Missing/Null Values (30% no phone, 20% no address)
-                phone = f.phone_number() if random.random() <= 0.30 else None
-                addrs = f.address().replace('\n', ',') if random.random() <= 0.2 else None
+                phone = f.phone_number() if random.random() <= 0.70 else None
+                addrs = f.address().replace('\n', ',') if random.random() <= 0.8 else None
                 # QUALITY ISSUE #3: Data Entry Errors (5% typo in email)
                 email = email.replace('a', '4').replace('e', '3') if random.random() < 0.05 else email
                 # QUALITY ISSUE #4: Impossible Birth Dates (1% impossible birth rate or data entry error)
@@ -261,7 +261,7 @@ def realistic_oltp_simulation():
         result = connector.execute("SELECT account_number FROM accounts")
         existing_nums = {row[0] for row in result}
         
-        num_accounts = random.randint(50, 150)
+        num_accounts = random.randint(1000, 3000)
         print(f"\n🏦 Creating {num_accounts} new accounts...")
         
         account_types = ["Savings", "Checking", "Investment", "Credit"]
@@ -561,6 +561,7 @@ def realistic_oltp_simulation():
         try:
             connector.close()
             print("🔌 Connection closed")
+            return "Hourly report created."
         except Exception:
             pass
     
@@ -579,6 +580,8 @@ def realistic_oltp_simulation():
     trx_count = simulate_transactions(db_conn)
     
     # Daily summary
-    generate_daily_report(db_conn, new_custs, new_accts, closed_accts, trx_count)
+    report = generate_daily_report(db_conn, new_custs, new_accts, closed_accts, trx_count)
+    # make it ordered
+    db_conn >> new_custs >> [new_accts, closed_accts] >> trx_count >> report
 
 dag_instance = realistic_oltp_simulation()

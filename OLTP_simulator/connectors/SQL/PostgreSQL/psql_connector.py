@@ -2,6 +2,7 @@ import pandas as pd
 import io
 import json
 import boto3
+from datetime import datetime
 import os
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine.base import Engine
@@ -141,8 +142,9 @@ class PostgresConnector(DatabaseConnector):
             sac_key = config["secret_access_key"]
             # mine is hidden in a file
             # save to s3
+            
             upload_file_bucket = 'jojo-connector-bucket'
-            upload_file_key = 'test/bronze/' + str(table) + f"/{str(table)}"
+            upload_file_key = 'test/bronze/' + str(table) + f"/{str(table)}" + f"/{datetime.now()}"
             filepath =  upload_file_key + ".csv"
             rows_imported = 0
             print(f'importing rows {rows_imported} to {rows_imported + len(df)}... for table {table}')

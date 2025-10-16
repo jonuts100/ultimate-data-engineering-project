@@ -67,6 +67,8 @@ def batch_ingestion_pipeline():
             # get all tables in 
             db_tables_info = {}
             db_tables = connector.get_table_names()
+            
+            print(db_tables)
             if not db_tables:
                 logging.warning("No tables found in the database.")
                 return
@@ -78,12 +80,13 @@ def batch_ingestion_pipeline():
                     FROM {tbl}
                     WHERE updated_at > %(latest_ts)s
                 """
-            
+
                 # fetch data
                 
-                new_data = pd.read_sql(query, con=connector.engine, index_col=False, params={
+                new_data = pd.read_sql(query, con=connector.engine, params={
                     "latest_ts": latest_ts
                 })
+                print(new_data.head(1))
                 if new_data.empty:
                     logging.warning(f"No new rows for {tbl}")
                     continue
@@ -109,8 +112,9 @@ def batch_ingestion_pipeline():
     @task
     def generate_hourly_report(result):
         """Generate summary report of hourly new data loading to S3"""
-        latest_ts = result[last_ts]
-        db_info = result[db_info]
+        print(result)
+        latest_ts = result["latest_ts"]
+        db_info = result["db_info"]
         
         print("\n" + "="*60)
         print("📊 HOURLY BATCH INGESTION REPORT")
@@ -124,5 +128,7 @@ def batch_ingestion_pipeline():
     last_ts = datetime.now() - timedelta(hours=1)
     db_conn = connect_to_db()
     result = fetch_new_rows(db_conn, last_ts)
-    generate_hourly_report(result)
+    report = generate_hourly_report(result)
+    db_conn >> result >> report
+    
 dag_instance=batch_ingestion_pipeline()

@@ -95,9 +95,9 @@ def realistic_oltp_simulation():
         now = pendulum.now()
         
         # Vary daily volume based on day of week
-        base_customers = 10000
+        base_customers = 1000
         if now.day_of_week in [5, 6]:  # Weekend -> fewer signups
-            num_customers = random.randint(2000, 5000)
+            num_customers = random.randint(200, 500)
         else:  # Weekday
             num_customers = random.randint(base_customers - 20, base_customers + 30)
         
@@ -261,7 +261,7 @@ def realistic_oltp_simulation():
         result = connector.execute("SELECT account_number FROM accounts")
         existing_nums = {row[0] for row in result}
         
-        num_accounts = random.randint(1000, 3000)
+        num_accounts = random.randint(200, 300)
         print(f"\n🏦 Creating {num_accounts} new accounts...")
         
         account_types = ["Savings", "Checking", "Investment", "Credit"]
@@ -390,7 +390,6 @@ def realistic_oltp_simulation():
         statuses_weighted = ['completed'] * 90 + ['pending'] * 7 + ['failed'] * 3
         transactions_data = []
         balance_updates = {}
-        recent_transfers = {}
         
         quality_issue_counts = {
             'late_arriving': 0,
@@ -433,24 +432,10 @@ def realistic_oltp_simulation():
                     amount = round(random.uniform(10, 200), 2)
             
             related_acc = None
-            # QUALITY ISSUE #7: Circular Transfers (A→B→A, fraud indicator)
+            other_accs = [a["id"] for a in accounts if a["id"] != account["id"]]
             if trx_type == "Transfer":
-                related_acc = random.choice([a["id"] for a in accounts if a["id"] != account["id"]])
-
-                if random.random() < 0.02:
-                    if account['id'] in recent_transfers:
-                        related_acc = recent_transfers[account["id"]]
-                        quality_issue_counts['circular_transfer'] += 1
-                recent_transfers[account["id"]] = related_acc
-            
-            # QUALITY ISSUE #3: Late-Arriving Transactions
-            # 5% of transactions arrive 5-30 days late
-            transaction_date = now
-            if random.random() < 0.05:
-                days_late = random.randint(5, 30)
-                transaction_date = now - timedelta(days=days_late)
-                quality_issue_counts['late_arriving'] += 1
-           
+                
+                related_acc = random.choice(other_accs)
             
             transactions_data.append({
                 "acc_id": account["id"],
